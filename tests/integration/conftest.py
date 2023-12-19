@@ -276,8 +276,8 @@ def daemons_handler_module(request: pytest.FixtureRequest) -> None:
     """
     yield from daemons_handler_implementation(request)
 
-@pytest.fixture()
-def configure_local_internal_options(request: pytest.FixtureRequest, test_metadata) -> None:
+
+def configure_local_internal_options_handler(request: pytest.FixtureRequest, test_metadata) -> None:
     """Configure the local internal options file.
 
     Takes the `local_internal_options` variable from the request.
@@ -286,6 +286,7 @@ def configure_local_internal_options(request: pytest.FixtureRequest, test_metada
 
     Args:
         request (pytest.FixtureRequest): Provide information about the current test function which made the request.
+        test_metadata (map): Data with configuration parameters 
     """
     try:
         local_internal_options = request.param
@@ -299,7 +300,7 @@ def configure_local_internal_options(request: pytest.FixtureRequest, test_metada
 
     backup_local_internal_options = configuration.get_local_internal_options_dict()
 
-    if 'local_internal_options' in test_metadata:
+    if test_metadata and 'local_internal_options' in test_metadata:
         for key in test_metadata['local_internal_options']:
             local_internal_options[key] = test_metadata['local_internal_options'][key]
 
@@ -309,34 +310,26 @@ def configure_local_internal_options(request: pytest.FixtureRequest, test_metada
 
     configuration.set_local_internal_options_dict(backup_local_internal_options)
 
-@pytest.fixture(scope='module')
-def configure_local_internal_options_module(request: pytest.FixtureRequest) -> None:
-    """Configure the local internal options file.
-
-    Takes the `local_internal_options` variable from the request.
-    The `local_internal_options` is a dict with keys and values as the Wazuh `local_internal_options` format.
-    E.g.: local_internal_options = {'monitord.rotate_log': '0', 'syscheck.debug': '0' }
+@pytest.fixture()
+def configure_local_internal_options(request: pytest.FixtureRequest, test_metadata) -> None:
+    """Wrapper of `configure_local_internal_options_handler` which contains the general implementation.
 
     Args:
         request (pytest.FixtureRequest): Provide information about the current test function which made the request.
+        test_metadata (map): Data with configuration parameters 
     """
-    try:
-        local_internal_options = request.param
-    except AttributeError:
-        try:
-            local_internal_options = getattr(request.module, 'local_internal_options')
-        except AttributeError:
-            raise AttributeError('Error when using the fixture "configure_local_internal_options", no '
-                                 'parameter has been passed explicitly, nor is the variable local_internal_options '
-                                 'found in the module.') from AttributeError
+    yield from configure_local_internal_options_handler(request, test_metadata)    
 
-    backup_local_internal_options = configuration.get_local_internal_options_dict()
 
-    configuration.set_local_internal_options_dict(local_internal_options)
+@pytest.fixture(scope='module')
+def configure_local_internal_options_module(request: pytest.FixtureRequest, test_metadata) -> None:
+    """Wrapper of `configure_local_internal_options_handler` which contains the general implementation.
 
-    yield
-
-    configuration.set_local_internal_options_dict(backup_local_internal_options)
+    Args:
+        request (pytest.FixtureRequest): Provide information about the current test function which made the request.
+        test_metadata (map): Data with configuration parameters 
+    """
+    yield from configure_local_internal_options_handler(request, test_metadata)    
 
 
 @pytest.fixture(scope='module')
