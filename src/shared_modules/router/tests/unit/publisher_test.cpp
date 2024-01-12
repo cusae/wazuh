@@ -10,6 +10,7 @@
  */
 
 #include "publisher_test.hpp"
+#include "socketClient.hpp"
 #include "src/publisher.hpp"
 #include <memory>
 #include <vector>
@@ -107,4 +108,111 @@ TEST_F(PublisherTest, TestPublishEmptyData)
 
     // Check that the Publisher class can publish empty data
     EXPECT_NO_THROW(publisher->push(emptyData));
+}
+
+/*
+ * @brief Tests send data to socket without header P
+ */
+TEST_F(PublisherTest, TestPublishSocketWithoutP)
+{
+    const std::string ENDPOINT_NAME = "test";
+    const std::string SOCKET_PATH = "test/";
+
+    const auto publisher = std::make_shared<Publisher>(ENDPOINT_NAME, SOCKET_PATH);
+    auto socketClient = std::make_unique<SocketClient<Socket<OSPrimitives>, EpollWrapper>>(SOCKET_PATH + ENDPOINT_NAME);
+
+    nlohmann::json jsonMessage;
+    jsonMessage["type"] = "subscribe";
+    jsonMessage["subscriberId"] = "ID_0";
+    auto jsonMessageString = jsonMessage.dump();
+
+    int32_t onReadCallCount = 0;
+
+    socketClient->connect(
+        [&onReadCallCount](const char* body, uint32_t bodySize, const char*, uint32_t)
+        {
+            nlohmann::json result;
+            EXPECT_NO_THROW(result = nlohmann::json::parse(body, body + bodySize));
+            if (onReadCallCount == 0)
+            {
+                EXPECT_EQ(result.dump(), R"({"Result":"OK"})");
+            }
+            else
+            {
+                EXPECT_EQ(
+                    result.dump(),
+                    R"({"offset":57000,"paths":["GracefulShutdown.json"],"stageStatus":[{"stage":"download","status":"ok"}],"type":"offsets"})");
+            }
+            onReadCallCount++;
+        },
+        [&jsonMessageString, &socketClient]()
+        { EXPECT_NO_THROW(socketClient->send(jsonMessageString.data(), jsonMessageString.size())); });
+
+    sleep(5);
+
+    auto routerMessageJson = R"(
+    {
+        "type": "offsets",
+        "offset": 57000,
+        "paths":
+        [
+            "GracefulShutdown.json"
+        ],
+        "stageStatus":
+        [
+            {
+                "stage": "download",
+                "status": "ok"
+            }
+        ]
+    }
+    )"_json;
+    const auto routerMessagePayload = routerMessageJson.dump();
+    const auto routerMessage = std::vector<char>(routerMessagePayload.begin(), routerMessagePayload.end());
+    publisher->call(routerMessage);
+
+    sleep(5);
+}
+
+/*
+ * @brief Tests send data to socket with header P
+ */
+TEST_F(PublisherTest, TestPublishSocketP)
+{
+    const std::string ENDPOINT_NAME = "test";
+    const std::string SOCKET_PATH = "test/";
+
+    const auto publisher = std::make_shared<Publisher>(ENDPOINT_NAME, SOCKET_PATH);
+    auto socketClient = std::make_unique<SocketClient<Socket<OSPrimitives>, EpollWrapper>>(SOCKET_PATH + ENDPOINT_NAME);
+
+    auto routerMessageJson = R"(
+    {
+        "type": "offsets",
+        "offset": 57000,
+        "paths":
+        [
+            "GracefulShutdown.json"
+        ],
+        "stageStatus":
+        [
+            {
+                "stage": "download",
+                "status": "ok"
+            }
+        ]
+    }
+    )"_json;
+    const auto routerMessagePayload = routerMessageJson.dump();
+
+    socketClient->connect(
+        [](const char* body, uint32_t bodySize, const char*, uint32_t)
+        {
+            nlohmann::json result;
+            EXPECT_NO_THROW(result = nlohmann::json::parse(body, body + bodySize));
+            EXPECT_EQ(result.dump(), R"({"Result":"OK"})");
+        },
+        [&routerMessagePayload, &socketClient]()
+        { EXPECT_NO_THROW(socketClient->send(routerMessagePayload.data(), routerMessagePayload.size(), "P", 1)); });
+
+    sleep(5);
 }
