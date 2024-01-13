@@ -72,10 +72,10 @@ public:
                         [fd, socketServer](const std::vector<char>& message)
                         { socketServer->send(fd, message.data(), message.size()); },
                         jsonBody.at("subscriberId").get_ref<const std::string&>()));
-
-                    const std::string responseString = R"({"Result":"OK"})";
-                    socketServer->send(fd, responseString.c_str(), responseString.size());
                 }
+
+                const std::string responseString = R"({"Result":"OK"})";
+                socketServer->send(fd, responseString.c_str(), responseString.size());
             });
     }
 
